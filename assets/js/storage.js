@@ -661,7 +661,8 @@ class StorageManager {
         g.progress = Math.min(100, Math.max(0, parseInt(g.progress, 10) || 0));
       });
       parsed.activities.forEach(a => {
-        a.duration = Math.max(1, parseInt(a.duration, 10) || 30);
+        const duration = parseInt(a.duration, 10);
+        a.duration = Math.max(1, Number.isNaN(duration) ? 30 : duration);
       });
 
       this.saveUniverse(parsed);

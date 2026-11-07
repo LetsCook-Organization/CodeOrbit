@@ -13,6 +13,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - 52 unit tests for dates, streaks, the productivity score, storage, import/export and achievement rules, run in four timezones on every pull request and push.
 
 ### Fixed
+- Importing a backup with a 0-minute session no longer turns it into 30 minutes; zero and negative durations are clamped to 1, the same as any other out-of-range value.
 - A brand-new account with nothing logged showed a productivity score of 20/100. It now shows 0 until the first session is logged.
 
 ### Removed

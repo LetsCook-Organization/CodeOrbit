@@ -174,11 +174,13 @@ describe('import and export', () => {
           { id: 's2', progress: -5 }
         ],
         projects: [{ id: 'p1', progress: '42' }],
+        // Every activity needs a valid date: imports drop dateless entries
+        // (see the malformed-dates security test below).
         activities: [
-          { id: 'a1', duration: -10 },
-          { id: 'a2', duration: 'x' },
-          { id: 'a3', duration: 0 },
-          { id: 'a4' }
+          { id: 'a1', date: '2026-11-01', duration: -10 },
+          { id: 'a2', date: '2026-11-02', duration: 'x' },
+          { id: 'a3', date: '2026-11-03', duration: 0 },
+          { id: 'a4', date: '2026-11-04' }
         ]
       })
     );

@@ -1,14 +1,25 @@
 /**
- * CODEORBIT — UNIVERSE ANALYTICS MODULE
- * Deep metrics, Chart.js integrations, and automated developer habit insights.
+ * CODEORBIT — PROGRESS PAGE MODULE (route: #analytics)
+ * Progress score (moved here from Home), badges count, totals, charts and
+ * a few plain-language observations about your study habits.
  */
 
 import { storage } from './storage.js';
-import { calculateStreak, isWithinLastNDays } from './utils.js';
+import {
+  calculateStreak,
+  calculateProductivityScore,
+  isWithinLastNDays,
+  peakWeekday
+} from './utils.js';
 import { chartManager } from './charts.js';
+import { escapeHTML } from './utils.js';
+import { openModal } from './components.js';
+import { ACHIEVEMENT_DEFINITIONS } from './achievements.js';
 
 export function initAnalytics() {
-  // Nothing to wire up yet. The router calls renderAnalytics() when the page is shown.
+  document.getElementById('score-breakdown-btn')?.addEventListener('click', () => {
+    openModal('score-breakdown-modal');
+  });
 }
 
 export function renderAnalytics() {
@@ -58,7 +69,22 @@ export function renderAnalytics() {
   setEl('analytics-skill-rate', `${skillCompletionRate}%`);
   setEl('analytics-project-rate', `${projectCompletionRate}%`);
   setEl('analytics-goal-rate', `${goalCompletionRate}%`);
-  setEl('analytics-streak', `${streak.currentStreak} Days`);
+  setEl('analytics-streak', `${streak.currentStreak}`);
+
+  // Progress score + its explanation dialog
+  const prod = calculateProductivityScore({
+    activities,
+    skills,
+    projects,
+    settings: data.settings || {}
+  });
+  setEl('score-number-display', `${prod.score}`);
+  setEl('score-level-badge', prod.level);
+  populateScoreModal(prod, setEl);
+
+  // Badges
+  const earned = (data.achievements || []).length;
+  setEl('progress-badges-count', `${earned} of ${ACHIEVEMENT_DEFINITIONS.length} earned`);
 
   // 2. Render Charts
   chartManager.renderWeeklyChart('analytics-weekly-chart', activities);
@@ -78,7 +104,7 @@ function generateHabitInsights(activities, skills, goals) {
   if (activities.length === 0) {
     container.innerHTML = `
       <div style="color: var(--text-muted); font-size: var(--text-sm); text-align: center; padding: 20px;">
-        Log a few learning sessions to generate intelligent velocity insights!
+        Add a few study sessions and we will point out patterns here.
       </div>
     `;
     return;
@@ -99,16 +125,7 @@ function generateHabitInsights(activities, skills, goals) {
   }
 
   // Find most active day of week
-  const dayCounts = [0, 0, 0, 0, 0, 0, 0]; // Sun..Sat
-  activities.forEach(a => {
-    if (a.date) {
-      const d = new Date(a.date);
-      dayCounts[d.getDay()] += Number(a.duration) || 0;
-    }
-  });
-  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const maxDayIdx = dayCounts.indexOf(Math.max(...dayCounts));
-  const peakDay = dayNames[maxDayIdx] || 'Weekday';
+  const peakDay = peakWeekday(activities);
 
   // Pending goals count
   const pendingGoals = goals.filter(g => g.status === 'Active').length;
@@ -116,22 +133,41 @@ function generateHabitInsights(activities, skills, goals) {
   container.innerHTML = `
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px;">
       <div class="card card-elevated" style="padding: 16px;">
-        <div style="font-size: 0.6875rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; margin-bottom: 4px;">Top Focus Skill</div>
-        <div style="font-size: var(--text-base); font-weight: 700; color: var(--cyan-accent);">${topSkill}</div>
-        <div style="font-size: var(--text-xs); color: var(--text-secondary); margin-top: 4px;">${Math.round((maxMins / 60) * 10) / 10} hours logged across sessions.</div>
+        <div class="label-mono" style="margin-bottom: 6px;">Most studied skill</div>
+        <div style="font-size: var(--text-lg); font-weight: 700;">${escapeHTML(topSkill)}</div>
+        <div style="font-size: var(--text-sm); color: var(--text-secondary); margin-top: 4px;">${Math.round((maxMins / 60) * 10) / 10} hours in total.</div>
       </div>
 
       <div class="card card-elevated" style="padding: 16px;">
-        <div style="font-size: 0.6875rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; margin-bottom: 4px;">Peak Velocity Day</div>
-        <div style="font-size: var(--text-base); font-weight: 700; color: #C4B5FD;">${peakDay}s</div>
-        <div style="font-size: var(--text-xs); color: var(--text-secondary); margin-top: 4px;">You achieve your highest focus volume on this day.</div>
+        <div class="label-mono" style="margin-bottom: 6px;">Your best day</div>
+        <div style="font-size: var(--text-lg); font-weight: 700;">${escapeHTML(peakDay)}</div>
+        <div style="font-size: var(--text-sm); color: var(--text-secondary); margin-top: 4px;">You study the most on this day of the week.</div>
       </div>
 
       <div class="card card-elevated" style="padding: 16px;">
-        <div style="font-size: 0.6875rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; margin-bottom: 4px;">Milestone Trajectory</div>
-        <div style="font-size: var(--text-base); font-weight: 700; color: var(--orbital-orange);">${pendingGoals} Active Goals</div>
-        <div style="font-size: var(--text-xs); color: var(--text-secondary); margin-top: 4px;">Prioritize upcoming deadlines in your Command Center.</div>
+        <div class="label-mono" style="margin-bottom: 6px;">Goals in progress</div>
+        <div style="font-size: var(--text-lg); font-weight: 700;">${pendingGoals}</div>
+        <div style="font-size: var(--text-sm); color: var(--text-secondary); margin-top: 4px;">See which ones are due soon on the Goals page.</div>
       </div>
     </div>
   `;
+}
+
+/** Fills in the "How your progress score works" dialog. */
+function populateScoreModal(prod, setEl) {
+  const b = prod.breakdown;
+  setEl(
+    'breakdown-consistency-val',
+    `${b.consistency.points} / ${b.consistency.max} (${b.consistency.activeDays} of 7 days)`
+  );
+  setEl(
+    'breakdown-hours-val',
+    `${b.learningHours.points} / ${b.learningHours.max} (${b.learningHours.currentHours} of ${b.learningHours.targetHours} hours)`
+  );
+  setEl(
+    'breakdown-projects-val',
+    `${b.projects.points} / ${b.projects.max} (${b.projects.count} projects)`
+  );
+  setEl('breakdown-skills-val', `${b.skills.points} / ${b.skills.max} (${b.skills.count} skills)`);
+  setEl('breakdown-total-val', `${prod.score} / 100 · ${prod.level}`);
 }

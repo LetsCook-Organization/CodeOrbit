@@ -91,17 +91,40 @@ export function getTodayISO() {
 }
 
 /**
+ * The weekday with the highest total focused minutes, e.g. 'Saturday'.
+ * Plain YYYY-MM-DD dates are parsed as LOCAL midnight: `new Date('2026-11-07')`
+ * alone is UTC midnight, which is still the previous day west of UTC and
+ * shifts every weekday count by one (the same trap toLocalISO documents below).
+ * @param {Array<{date?: string, duration?: number}>} activities
+ * @returns {string} The peak weekday name, or 'Weekday' when no session has minutes.
+ */
+export function peakWeekday(activities = []) {
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const dayCounts = [0, 0, 0, 0, 0, 0, 0]; // Sun..Sat
+  for (const a of activities) {
+    if (!a || !a.date) continue;
+    const d = new Date(a.date.slice(0, 10) + 'T00:00:00');
+    if (Number.isNaN(d.getTime())) continue;
+    dayCounts[d.getDay()] += Number(a.duration) || 0;
+  }
+  if (!dayCounts.some(mins => mins > 0)) return 'Weekday';
+  return dayNames[dayCounts.indexOf(Math.max(...dayCounts))];
+}
+
+/**
  * Formats an ISO date string into a friendly localized format.
  * Example: '2026-11-07' -> 'Nov 7, 2026'
  * @param {string} dateStr - Date string
  * @param {boolean} includeWeekday - Include weekday name
- * @returns {string} Formatted date
+ * @returns {string} Formatted date, 'N/A' when empty, or 'Invalid date' (never the raw input)
  */
 export function formatDate(dateStr, includeWeekday = false) {
-  if (!dateStr) return 'N/A';
+  if (!dateStr || typeof dateStr !== 'string') return 'N/A';
   try {
     const d = new Date(dateStr + (dateStr.length === 10 ? 'T00:00:00' : ''));
-    if (isNaN(d.getTime())) return dateStr;
+    // Never return the input itself: callers insert the result into innerHTML,
+    // so an invalid "date" from an imported file must not reach the page as HTML.
+    if (isNaN(d.getTime())) return 'Invalid date';
 
     const options = {
       month: 'short',
@@ -111,7 +134,7 @@ export function formatDate(dateStr, includeWeekday = false) {
     if (includeWeekday) options.weekday = 'short';
     return d.toLocaleDateString('en-US', options);
   } catch {
-    return dateStr;
+    return 'Invalid date';
   }
 }
 
@@ -304,11 +327,11 @@ export function calculateProductivityScore({
     Math.max(0, consistencyScore + hoursScore + projectScore + skillScore)
   );
 
-  let level = 'Sub-Orbital';
-  if (totalScore >= 85) level = 'Hyperdrive Velocity';
-  else if (totalScore >= 70) level = 'Orbital Velocity';
-  else if (totalScore >= 50) level = 'Atmospheric Ascender';
-  else if (totalScore >= 30) level = 'Launch Sequence';
+  let level = 'Just beginning';
+  if (totalScore >= 85) level = 'Excellent';
+  else if (totalScore >= 70) level = 'Very good';
+  else if (totalScore >= 50) level = 'Good';
+  else if (totalScore >= 30) level = 'Getting started';
 
   return {
     score: totalScore,

@@ -58,3 +58,7 @@ id_ed25519
 venv/
 env/
 ENV/
+
+# README graphics fonts (download separately)
+.github/readme/src/fonts/
+__pycache__/

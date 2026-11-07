@@ -227,6 +227,83 @@ Execution flow is documented separately in [`FLOW.md`](FLOW.md).
 - **Trade-off accepted:** Maintainers must answer claims and review PRs quickly or contributors leave; 14-day reassignment means some work is abandoned midway. The `good first issue` pool will run out fast and needs refilling.
 - **Alternatives rejected:** Reserving issues for Let's Cook members first: easier onboarding for the community, but signals the project is not really open.
 
+### D-017: README rewritten in plain language, with Let's Cook branding and generated, animated graphics
+- **Date:** 2026-11-07 · **Status:** Accepted
+- **Context:** The README mixed marketing language ("telemetry", "flightpaths", "data sovereignty") with a long technical tree, did not explain the issues or how to start contributing, and did not carry the Let's Cook identity.
+- **Decision:**
+  1. **Plain language first:** short sentences, every space-themed name translated ("Mission Logs = your study sessions"), numbered sections 00–12 in a Swiss layout, FAQ in collapsible blocks.
+  2. Sections for the problem, the solution, features, how it works, trying it, how the code is organised, **all open issues by difficulty**, a step-by-step first contribution, how quality is checked, roadmap and FAQ.
+  3. **Brand:** Let's Cook black / white / crimson `#B8002F`, the official logo in light- and dark-mode versions (`<picture>`), and the motto *Codere, Aedificare, Vincere*.
+  4. **Graphics are generated** by `.github/readme/src/build.py` into SVGs: text converted to shapes (Inter, JetBrains Mono) so they look identical everywhere; **only looping motion** (orbits, twinkling stars, a travelling dot, flowing arrows); **no fade-in of text**; motion turned off for `prefers-reduced-motion`.
+  5. Assets live in `.github/readme/`, which is not published to the live site.
+- **Why:**
+  - Many readers are students reading in a second language; simple English helps every one of them and costs experts nothing.
+  - A first version faded text in. In a full-page capture, text below the fold stayed **invisible**, because animations had not started. Any viewer that shows only the first frame (some previews, apps, screenshots) would show empty cards, so fade-ins were removed.
+  - Every claim was checked against the code: e.g. "no analytics" instead of "no tracking", because the app loads fonts and libraries from Google Fonts and jsDelivr.
+- **Trade-off accepted:**
+  - The issue table in the README is a snapshot of v0.1.0 and will go stale; it links to the live issue list and says so.
+  - Graphics with text-as-shapes are larger (≈100–150 KB each) and cannot be edited by hand; changes go through `build.py`.
+  - The hero banner shows `v0.1.0`; rebuild it when the version changes.
+- **Alternatives rejected:** Plain Markdown with no images: lighter, but does not carry the project's identity. Raster (PNG/GIF) banners: no crisp scaling and a GIF cannot respect reduced-motion settings.
+
+### D-018: Never echo raw input into HTML; drop malformed dates on import
+- **Date:** 2026-11-07 · **Status:** Accepted · Amends B-007
+- **Context:** An open-source readiness audit tested a deliberately malicious backup file (an HTML/JS payload in every field) in Chrome across all 8 pages. **6 payloads executed**: `formatDate()` returned an invalid date string unchanged and its result is inserted with `innerHTML` (activity dates, goal deadlines, skill and project target dates, achievement unlock times), and Analytics printed the top skill name unescaped. A dashboard project status was also unescaped. All other fields were already escaped, and `javascript:` links were already blocked. Risk: anyone importing a backup shared by someone else. The live site shares an origin (`letscook-organization.github.io`) with every other Pages site of the org, so script running there could read their `localStorage` too.
+- **Decision:**
+  1. `formatDate()` (and so `formatRelativeTime()`) returns `'N/A'` or `'Invalid date'`, **never its input**.
+  2. Escape the remaining user-controlled values (top skill name, project status, date-group label).
+  3. `importJSON` keeps only well-formed dates (`YYYY-MM-DD`, optionally with time): bad optional dates become empty, sessions and achievements without a valid date are dropped.
+  4. Regression tests for both; the browser check re-run: **0 payloads executed**, both with poisoned stored data and through the real Settings → Import flow.
+- **Why:** Two layers: even if one escaping call is forgotten in a future template, malformed data should not get into storage from an import, and vice versa.
+- **Trade-off accepted:** A backup containing sessions with missing or malformed dates loses those sessions on import (the app itself never creates such sessions). The rule in B-007 still depends on every new template escaping user text; the security tests only cover the fields that exist today.
+- **Disclosure:** fixed the same day it was found, before any public report; noted in the CHANGELOG under *Security*.
+
+### D-019: Force the patched `minimatch` inside ESLint with an npm override
+- **Date:** 2026-11-07 · **Status:** Accepted
+- **Context:** Dependabot reported [GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249) (moderate, denial of service) in `minimatch` < 11.0.1, used by ESLint 10 (`@eslint/config-array` asks for `^10.2.4`, which has no patched release). `npm audit fix --force` proposed **downgrading** ESLint to 9.
+- **Decision:** Add `"overrides": { "minimatch": "11.0.5" }` to `package.json`.
+- **Why:** The risk to users was zero: ESLint is a development tool that never ships to the live site, and the patterns it matches are written by us. But an open alert trains people to ignore alerts. The override closes it without downgrading the linter. Verified: `npm audit` reports 0 vulnerabilities, ESLint still reports planted errors, and its ignore patterns (`docs/`, `*.min.js`) still work.
+- **Trade-off accepted:** ESLint officially supports minimatch 10, not 11. If a future ESLint update breaks because of this, remove the override once ESLint itself depends on a patched version (Dependabot will open that update).
+
+### D-020: Redesign the frontend: Space × Let's Cook × Swiss, with a minimal Home
+- **Date:** 2026-11-07 · **Status:** Accepted · Supersedes the old "cosmic" look (purple/cyan gradients, glass cards, sidebar)
+- **Context:** The founder asked for a new frontend that combines three themes (space, the Let's Cook brand, Swiss design), matches the README, and is **minimal, not messy**. The old dashboard showed six blocks at once (hero, four KPI cards, a score gauge, an orbit visualiser with two charts, recent logs, active projects, milestones). A mockup was reviewed and approved before any code changed.
+- **Decision:**
+  1. **One look everywhere.** Black/white/greys and **one** crimson (`#B8002F` for fills with white text, `#FF4D6A` for crimson *text* on black so it passes contrast). Inter for text with very heavy, tight numbers; JetBrains Mono for small uppercase labels. Flat 1px-line cards, no gradients or glows. Old colour variable names (`--cyan-accent`, `--orbital-orange`, …) are kept but point at the new palette, so every page changed at once without rewriting every template.
+  2. **Top bar instead of a sidebar:** Home · Skills · Study sessions · Projects · Goals · Progress, then search, light/dark and the profile picture (which opens Settings). Badges open from the Progress page.
+  3. **Home answers one question: "how is my week going, and what is next?"** Greeting, hours in the last 7 days against the weekly goal, one *Add study time* button, an orbit where each planet is a skill (bigger = further along, crimson = finished), hours for each of the last 7 days, and the next goal and last session. Everything else moved to its page: the progress score to **Progress**, project and goal lists to their pages.
+  4. **First visit** (no skills and no study time) shows a getting-started screen with *Add your first skill* and *Try it with sample data first* instead of empty widgets.
+  5. **Space lives in the visuals** (orbit, planets, a quiet starfield), not in the words; see D-022.
+  6. **Motion** is slow and decorative only (orbits turn, stars twinkle). Everything stops under `prefers-reduced-motion`, and no information is shown only through motion.
+  7. **Route names stay** (`#dashboard`, `#progress`, `#analytics`, …) so links and bookmarks keep working; only titles changed.
+- **Why:** A dashboard that shows everything makes people read everything before they find the one number they came for. Moving detail to its own page keeps it one click away. One accent colour makes the single important action obvious on each screen. Keeping the variable names and route names meant the change touched no stored data and no tests' meaning.
+- **Trade-off accepted:**
+  - The progress score and badges are no longer on the first screen; people who were motivated by them need one extra click. If that hurts, a single "6 of 10 badges" line on Home is the smallest way back.
+  - The orbit shows at most 12 skills and planets have no visible labels (names are in a tooltip and in the screen-reader label).
+  - Old variable names (`--cyan-accent` now means "strong text colour") are misleading for new contributors until they are renamed in a follow-up.
+  - Issues that describe the old dashboard (KPI cards, sidebar) need their wording updated.
+- **Alternatives rejected:** Keeping the old layout and only recolouring it: still six blocks on Home. A framework rewrite (React etc.): would invalidate the open issues and the "no build step" rule (B-001) for no user benefit.
+
+### D-021: Serve the fonts from the repo instead of Google Fonts
+- **Date:** 2026-11-07 · **Status:** Accepted · Amends D-011
+- **Context:** The app loaded Inter and JetBrains Mono from Google Fonts. That is a request to Google on every visit (the README's "no analytics" had to be worded around it), and Google's CSS cannot be pinned with SRI (D-011).
+- **Decision:** Ship two files in `assets/fonts/`: Inter variable (latin, 48 KB, every weight) and JetBrains Mono 500 (latin, 24 KB), both under the SIL Open Font License 1.1 (licence files next to them). `style.css` declares them with `@font-face` and `font-display: swap`; Inter is preloaded.
+- **Why:** No third-party request for fonts, nothing to pin, works offline once cached, and the redesign depends on Inter's 900 weight looking exactly right.
+- **Trade-off accepted:** About 72 KB in the repo and on first load. Only latin characters are included; other scripts fall back to system fonts. Updating the fonts is a manual copy (from the `@fontsource` npm packages).
+- **Alternatives rejected:** Keep Google Fonts: an outside request we cannot pin. System fonts only: the Swiss look depends on Inter's heavy numerals.
+
+### D-022: Plain words on screen; stored values stay the same
+- **Date:** 2026-11-07 · **Status:** Accepted
+- **Context:** The founder asked that every word on the dashboard be understood by the user. The app used space jargon (Command Center, Mission Logs, Space Missions, Milestones, Velocity, "Atmospheric Ascender"), a Latin motto, abbreviations like `1.25h`, and emoji icons.
+- **Decision:**
+  - Rule: **every label must make sense to someone opening the app for the first time.** No space jargon, no Latin, no unexplained abbreviations (`1h 15m`, not `1.25h`).
+  - Page names: Home, Skills, Study sessions, Projects, Goals, Progress, Badges, Settings. Score levels: Just beginning, Getting started, Good, Very good, Excellent. Badges renamed after what they reward ("7 days in a row").
+  - **Stored values do not change.** Statuses like `Completed`, `Practicing`, `On Hold`, badge ids and categories, and the storage key are kept; small label functions (`statusLabel`, `projectStatusLabel`, `typeLabel`, `categoryLabel`) translate them for display only.
+  - Emoji replaced with a small inline line-icon set (`assets/js/icons.js`).
+- **Why:** Many users are students reading in a second language. Renaming stored values would break everyone's saved data and backups and require a migration for no visible gain.
+- **Trade-off accepted:** Code and storage still say `missions`, `activities`, `Completed`, so contributors see two vocabularies; the label helpers are the bridge and must be used in new templates.
+- **Alternatives rejected:** Keeping the space words with a glossary: the user should not need one. Migrating stored values: risk to existing data.
+
 ---
 
 ## Part B: Inherited decisions (reconstructed)

@@ -37,6 +37,7 @@ A calmer, simpler CodeOrbit that works offline and reminds you to back up.
 - New projects start with an empty "Tools used" list instead of "TypeScript, Node.js".
 
 ### Fixed
+- Importing a backup with a 0-minute session no longer turns it into 30 minutes; zero and negative durations are clamped to 1, the same as any other out-of-range value.
 - The getting-started screen (and its *Try it with sample data first* button) appeared when you had only projects or goals, and loading sample data would have replaced them. It now only appears when nothing at all is saved.
 - Skill cards were hard on the eyes: too many bright, heavy elements. They are calmer now: softer numbers, grey planets and bars (crimson only when finished), plain-text categories, and regular digits on the ±10% buttons. Main text is now a soft off-white instead of near-pure white.
 - Loading sample data, restoring a backup or deleting all data no longer shows "You earned a badge" pop-ups. Badges you really earn still get one.

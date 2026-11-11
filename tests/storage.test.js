@@ -179,9 +179,13 @@ describe('import and export', () => {
           { id: 's2', progress: -5 }
         ],
         projects: [{ id: 'p1', progress: '42' }],
+        // Every activity needs a valid date: imports drop dateless entries
+        // (see the malformed-dates security test below).
         activities: [
-          { id: 'a1', duration: -10 },
-          { id: 'a2', duration: 'x' }
+          { id: 'a1', date: '2026-11-01', duration: -10 },
+          { id: 'a2', date: '2026-11-02', duration: 'x' },
+          { id: 'a3', date: '2026-11-03', duration: 0 },
+          { id: 'a4', date: '2026-11-04' }
         ]
       })
     );
@@ -193,6 +197,11 @@ describe('import and export', () => {
     assert.equal(u.projects[0].progress, 42);
     assert.deepEqual(u.projects[0].technologies, []);
     for (const a of u.activities) assert.ok(a.duration >= 1, `duration ${a.duration}`);
+    // -10 -> 1 (minimum), 0 -> 1, non-numeric/missing -> 30 (default)
+    assert.deepEqual(
+      u.activities.map(a => a.duration),
+      [1, 30, 1, 30]
+    );
   });
 
   // Regression for D-009: a backup without a profile used to become "Alex Rivera".

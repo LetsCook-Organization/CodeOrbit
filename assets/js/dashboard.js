@@ -14,7 +14,9 @@
 
 import { storage } from './storage.js';
 import {
+  daysUntil,
   escapeHTML,
+  formatDaysUntil,
   formatDuration,
   formatRelativeTime,
   calculateStreak,
@@ -327,7 +329,6 @@ function renderComingUp(goals, activities, offerRecap = false) {
   if (!container) return;
 
   const rows = [];
-  const today = getTodayISO();
 
   const nextGoal = goals
     .filter(g => g.status === 'Active')
@@ -336,7 +337,7 @@ function renderComingUp(goals, activities, offerRecap = false) {
   if (nextGoal) {
     rows.push({
       href: '#goals',
-      kind: goalDueText(nextGoal.deadline, today),
+      kind: goalDueText(nextGoal.deadline),
       title: nextGoal.title,
       meta: `${Number(nextGoal.progress) || 0}% done`
     });
@@ -386,13 +387,9 @@ function renderComingUp(goals, activities, offerRecap = false) {
   document.getElementById('home-open-recap')?.addEventListener('click', () => openRecap());
 }
 
-function goalDueText(deadline, today) {
+function goalDueText(deadline) {
   if (!deadline) return 'Goal · no due date';
-  const days = Math.round(
-    (new Date(`${deadline.slice(0, 10)}T00:00:00`) - new Date(`${today}T00:00:00`)) / 86400000
-  );
-  if (Number.isNaN(days)) return 'Goal';
-  if (days < 0) return `Goal · ${-days} day${days === -1 ? '' : 's'} late`;
-  if (days === 0) return 'Goal · due today';
-  return `Goal · due in ${days} day${days === 1 ? '' : 's'}`;
+  const days = daysUntil(deadline);
+  if (days === null) return 'Goal';
+  return `Goal · ${formatDaysUntil(days, { futureStyle: 'in' })}`;
 }

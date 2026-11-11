@@ -9,6 +9,8 @@ import {
   escapeHTML,
   formatDate,
   formatRelativeTime,
+  daysUntil,
+  formatDaysUntil,
   toLocalISO,
   getTodayISO,
   getRelativeISO,
@@ -180,6 +182,122 @@ describe('local calendar dates', () => {
     assert.equal(isWithinLastNDays('2026-11-05T23:59:00.000Z', 7), true);
     assert.equal(isWithinLastNDays('', 7), false);
     assert.equal(isWithinLastNDays(undefined, 7), false);
+  });
+});
+
+describe('daysUntil', () => {
+  test('returns 0 (never -0) for due today early in the morning', t => {
+    freezeTime(t, new Date(2026, 10, 7, 0, 5, 0));
+    assert.equal(daysUntil('2026-11-07'), 0);
+    assert.equal(daysUntil('2026-11-08'), 1);
+    assert.equal(daysUntil('2026-11-06'), -1);
+  });
+
+  test('returns 0 (never -0) for due today late in the evening', t => {
+    freezeTime(t, new Date(2026, 10, 7, 23, 55, 0));
+    assert.equal(daysUntil('2026-11-07'), 0);
+    assert.equal(daysUntil('2026-11-08'), 1);
+    assert.equal(daysUntil('2026-11-06'), -1);
+  });
+
+  // Regression for issue #8: 04:00 IST (UTC+5:30) and 20:00 PST (UTC-8) used to shift by 1 day.
+  test('matches local calendar days at 04:00 IST', t => {
+    freezeTime(t, '2026-11-07T04:00:00+05:30'); // 2026-11-06 22:30 UTC
+    assert.equal(daysUntil(getTodayISO()), 0);
+    if (TZ === 'Asia/Kolkata') {
+      assert.equal(daysUntil('2026-11-07'), 0);
+      assert.equal(daysUntil('2026-11-08'), 1);
+      assert.equal(daysUntil('2026-11-06'), -1);
+    }
+  });
+
+  test('matches local calendar days at 20:00 PST', t => {
+    freezeTime(t, '2026-11-07T20:00:00-08:00'); // 2026-11-08 04:00 UTC
+    assert.equal(daysUntil(getTodayISO()), 0);
+    if (TZ === 'America/Los_Angeles') {
+      assert.equal(daysUntil('2026-11-07'), 0);
+      assert.equal(daysUntil('2026-11-08'), 1);
+      assert.equal(daysUntil('2026-11-06'), -1);
+    }
+  });
+
+  test('counts across month, leap-day, and multi-day boundaries', t => {
+    freezeTime(t, localNoon(2028, 2, 28));
+    assert.equal(daysUntil('2028-02-29'), 1);
+    assert.equal(daysUntil('2028-03-01'), 2);
+    assert.equal(daysUntil('2028-02-25'), -3);
+  });
+
+  test('counts across the year-end boundary', t => {
+    freezeTime(t, localNoon(2026, 12, 31));
+    assert.equal(daysUntil('2027-01-01'), 1);
+    assert.equal(daysUntil('2027-01-05'), 5);
+    assert.equal(daysUntil('2026-12-30'), -1);
+  });
+
+  test('stays accurate across spring-forward DST transition', t => {
+    // US clocks spring forward on 2026-03-08 (23-hour day)
+    freezeTime(t, new Date(2026, 2, 8, 1, 30));
+    assert.equal(daysUntil('2026-03-07'), -1);
+    assert.equal(daysUntil('2026-03-08'), 0);
+    assert.equal(daysUntil('2026-03-09'), 1);
+  });
+
+  test('stays accurate across fall-back DST transition', t => {
+    // US clocks fall back on 2026-11-01 (25-hour day)
+    freezeTime(t, new Date(2026, 10, 1, 0, 30));
+    assert.equal(daysUntil('2026-10-31'), -1);
+    assert.equal(daysUntil('2026-11-01'), 0);
+    assert.equal(daysUntil('2026-11-02'), 1);
+  });
+
+  test('accepts full ISO timestamps and trims surrounding whitespace', t => {
+    freezeTime(t, localNoon(2026, 11, 7));
+    assert.equal(daysUntil(' 2026-11-08T23:59:59.000Z '), 1);
+    assert.equal(daysUntil('2026-11-07T12:00:00+05:30'), 0);
+  });
+
+  test('returns null for missing, invalid, or overflowing calendar dates', t => {
+    freezeTime(t, localNoon(2026, 11, 7));
+    for (const bad of [
+      '',
+      '   ',
+      null,
+      undefined,
+      42,
+      {},
+      'not-a-date',
+      '2026-13-01',
+      '2026-02-30',
+      '2026-02-29',
+      '2026-11-07foo',
+      '2026-11-07T25:00:00Z',
+      '<img src=x onerror=alert(1)>'
+    ]) {
+      assert.equal(daysUntil(bad), null, String(bad));
+    }
+  });
+});
+
+describe('formatDaysUntil', () => {
+  test('uses singular "day" for 1 and -1, plural "days" otherwise', () => {
+    assert.equal(formatDaysUntil(1), '1 day left');
+    assert.equal(formatDaysUntil(3), '3 days left');
+    assert.equal(formatDaysUntil(-1), '1 day late');
+    assert.equal(formatDaysUntil(-2), '2 days late');
+    assert.equal(formatDaysUntil(1, { futureStyle: 'in' }), 'due in 1 day');
+    assert.equal(formatDaysUntil(3, { futureStyle: 'in' }), 'due in 3 days');
+  });
+
+  test('formats 0 as due today with optional capitalization', () => {
+    assert.equal(formatDaysUntil(0), 'due today');
+    assert.equal(formatDaysUntil(0, { capitalizeToday: true }), 'Due today');
+  });
+
+  test('returns empty string for null or non-finite values', () => {
+    for (const bad of [null, undefined, NaN, Infinity, -Infinity]) {
+      assert.equal(formatDaysUntil(bad), '');
+    }
   });
 });
 

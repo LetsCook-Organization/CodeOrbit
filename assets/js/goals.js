@@ -5,7 +5,7 @@
  */
 
 import { storage } from './storage.js';
-import { escapeHTML, formatDate, getTodayISO } from './utils.js';
+import { daysUntil, escapeHTML, formatDate, formatDaysUntil, getTodayISO } from './utils.js';
 import { openModal, closeModal, toast, showConfirmDialog } from './components.js';
 
 let searchQuery = '';
@@ -155,7 +155,8 @@ export function renderGoals() {
   container.innerHTML = filtered
     .map(g => {
       const isCompleted = g.status === 'Completed';
-      const isOverdue = !isCompleted && g.deadline && g.deadline < today;
+      const daysLeft = g.deadline ? daysUntil(g.deadline) : null;
+      const isOverdue = !isCompleted && daysLeft !== null && daysLeft < 0;
       const id = escapeHTML(g.id);
       const progress = Math.max(0, Math.min(100, Number(g.progress) || 0));
       const ringCircum = 2 * Math.PI * 20; // 125.66 for r=20
@@ -163,16 +164,14 @@ export function renderGoals() {
 
       let deadlineDisplay = 'No due date';
       if (g.deadline) {
-        const daysLeft = Math.ceil((new Date(g.deadline) - new Date()) / (1000 * 60 * 60 * 24));
-        const text =
-          daysLeft < 0
-            ? `${-daysLeft} days late`
-            : daysLeft === 0
-              ? 'Due today'
-              : `${daysLeft} days left`;
-        deadlineDisplay = isCompleted
-          ? `Finished &bull; was due ${formatDate(g.deadline)}`
-          : `${text} &bull; ${formatDate(g.deadline)}`;
+        if (isCompleted) {
+          deadlineDisplay = `Finished &bull; was due ${formatDate(g.deadline)}`;
+        } else if (daysLeft === null) {
+          deadlineDisplay = formatDate(g.deadline);
+        } else {
+          const text = formatDaysUntil(daysLeft, { capitalizeToday: true });
+          deadlineDisplay = `${text} &bull; ${formatDate(g.deadline)}`;
+        }
       }
 
       return `

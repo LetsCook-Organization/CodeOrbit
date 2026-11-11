@@ -5,7 +5,14 @@
  */
 
 import { storage } from './storage.js';
-import { escapeHTML, formatDate, safeUrl, projectStatusLabel } from './utils.js';
+import {
+  daysUntil,
+  escapeHTML,
+  formatDate,
+  formatDaysUntil,
+  safeUrl,
+  projectStatusLabel
+} from './utils.js';
 import { openModal, closeModal, toast, showConfirmDialog } from './components.js';
 
 let searchQuery = '';
@@ -165,14 +172,13 @@ export function renderProjects() {
 
       let targetDateDisplay = 'No finish date';
       if (p.targetDate) {
-        const daysLeft = Math.ceil((new Date(p.targetDate) - new Date()) / (1000 * 60 * 60 * 24));
-        const countdown =
-          daysLeft < 0
-            ? `${-daysLeft} days late`
-            : daysLeft === 0
-              ? 'due today'
-              : `${daysLeft} days left`;
-        targetDateDisplay = `Finish by ${formatDate(p.targetDate)} (${countdown})`;
+        const daysLeft = daysUntil(p.targetDate);
+        const formatted = formatDate(p.targetDate);
+        targetDateDisplay = isCompleted
+          ? `Finished &bull; was due ${formatted}`
+          : daysLeft === null
+            ? `Finish by ${formatted}`
+            : `Finish by ${formatted} (${formatDaysUntil(daysLeft)})`;
       }
 
       return `

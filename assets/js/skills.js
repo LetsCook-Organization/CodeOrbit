@@ -1,10 +1,11 @@
 /**
- * CODEORBIT — SKILL UNIVERSE MODULE
- * Planetary competency tracker, search, filters, sorting, and full CRUD operations.
+ * CODEORBIT — SKILLS PAGE
+ * Skill cards with search, filters and sorting; +10% / −10% buttons; the
+ * add / edit skill dialog (also opened from Home).
  */
 
 import { storage } from './storage.js';
-import { escapeHTML, formatDate } from './utils.js';
+import { escapeHTML, formatDate, statusLabel } from './utils.js';
 import { openModal, closeModal, toast, showConfirmDialog } from './components.js';
 
 let searchQuery = '';
@@ -108,8 +109,7 @@ export function renderSkills() {
 
   // 4. Sorting
   skills.sort((a, b) => {
-    if (activeSort === 'name-asc') return a.name.localeCompare(b.name);
-    if (activeSort === 'name-desc') return b.name.localeCompare(a.name);
+    if (activeSort === 'name-asc') return (a.name || '').localeCompare(b.name || '');
     if (activeSort === 'progress-desc') return (b.progress || 0) - (a.progress || 0);
     if (activeSort === 'progress-asc') return (a.progress || 0) - (b.progress || 0);
     if (activeSort === 'date-desc') return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
@@ -210,9 +210,7 @@ function getStatusBadgeClass(status) {
     case 'Completed':
       return 'badge-primary';
     case 'Practicing':
-      return 'badge-orange';
-    case 'Learning':
-      return 'badge-cyan';
+      return 'badge-accent';
     default:
       return 'badge-muted';
   }
@@ -257,12 +255,12 @@ function showSkillContextMenu(skillId, anchorEl) {
   menu.innerHTML = `
     <button class="dropdown-item" id="menu-edit-skill">
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>
-      Edit Skill
+      Edit
     </button>
     <div class="dropdown-divider"></div>
     <button class="dropdown-item danger" id="menu-delete-skill">
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
-      Delete Skill
+      Delete
     </button>
   `;
 
@@ -284,6 +282,7 @@ function showSkillContextMenu(skillId, anchorEl) {
       activeMenuDismissListener = null;
     }
     const s = storage.getSkillById(skillId);
+    if (!s) return;
     showConfirmDialog({
       title: 'Delete this skill?',
       message: `"${s.name}" will be deleted. This cannot be undone.`,
@@ -371,18 +370,4 @@ function handleSkillFormSubmit(e) {
   storage.saveSkill(skillData);
   closeModal('skill-modal');
   toast.success(id ? 'Saved' : 'Skill added', `${name}`);
-}
-
-/** Words people see for each stored status (stored values stay the same). */
-function statusLabel(status) {
-  switch (status) {
-    case 'Completed':
-      return 'Finished';
-    case 'Practicing':
-      return 'Practising';
-    case 'Not Started':
-      return 'Not started';
-    default:
-      return status || 'Learning';
-  }
 }

@@ -4,7 +4,7 @@
    Everything else lives on its own page (docs/DECISIONS.md, D-020).
    ========================================================================== */
 
-/* ---------- Home: first-visit state (no skills, no sessions yet) ---------- */
+/* ---------- Home: first visit (nothing saved yet) ---------- */
 .home-empty {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
@@ -161,6 +161,41 @@
   line-height: 1.6;
 }
 
+.home-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+#home-quick-add {
+  max-width: 100%;
+}
+
+.btn-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-quick-done {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-top: calc(-1 * var(--space-md));
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.home-quick-done[hidden] {
+  display: none;
+}
+
+#home-week-streak.is-at-risk {
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
 .home-orbit-figure {
   grid-column: span 6;
   display: flex;
@@ -289,6 +324,20 @@
   color: var(--text-primary);
 }
 
+button.next-row {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--border-light);
+  font: inherit;
+  cursor: pointer;
+}
+
+button.next-row .next-title {
+  color: var(--accent-text);
+}
+
 .next-body {
   flex: 1;
   min-width: 0;
@@ -332,6 +381,91 @@
   color: var(--accent-text);
 }
 
+/* Week in review (pop-up) */
+.recap-figure {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  margin: var(--space-xs) 0;
+}
+
+.recap-hours {
+  font-weight: 900;
+  font-size: 4.5rem;
+  line-height: 0.9;
+  letter-spacing: -0.05em;
+  font-variant-numeric: tabular-nums;
+}
+
+.recap-unit {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.recap-compare {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-lg);
+}
+
+.recap-facts {
+  border-top: 1px solid var(--border);
+  margin-bottom: var(--space-lg);
+}
+
+.recap-facts > div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+}
+
+.recap-facts dt {
+  color: var(--text-secondary);
+}
+
+.recap-facts dd {
+  font-weight: 600;
+  text-align: right;
+}
+
+/* Backup reminder (bottom of Home) */
+.home-backup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-top: var(--space-2xl);
+  padding: var(--space-md) var(--space-lg);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--primary);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.home-backup[hidden] {
+  display: none;
+}
+
+.home-backup strong {
+  color: var(--text-primary);
+}
+
+.home-backup p {
+  flex: 1 1 360px;
+}
+
+.home-backup-actions {
+  display: flex;
+  gap: var(--space-xs);
+}
+
 /* ==========================================================================
    STAT STRIP (used on Study sessions, Projects, Goals, Progress)
    Swiss: numbers are the hero, hairlines instead of boxes.
@@ -373,11 +507,6 @@
   color: var(--text-muted);
 }
 
-.kpi-icon,
-.kpi-icon-wrap {
-  display: none;
-}
-
 .kpi-value-row {
   display: flex;
   align-items: baseline;
@@ -389,13 +518,8 @@
   font-size: clamp(2.25rem, 4vw, 3rem);
   line-height: 1;
   letter-spacing: -0.04em;
-  color: var(--text-primary) !important; /* the old markup coloured some numbers inline */
+  color: var(--text-primary);
   font-variant-numeric: tabular-nums;
-}
-
-.kpi-unit {
-  font-size: var(--text-sm);
-  color: var(--text-muted);
 }
 
 /* Small icon box used in the study-session list */
@@ -417,7 +541,7 @@
 /* ==========================================================================
    PROGRESS SCORE CARD (on the Progress page)
    ========================================================================== */
-.productivity-card {
+.score-card {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: var(--space-2xl);
@@ -447,33 +571,33 @@
   color: var(--text-muted);
 }
 
-.productivity-info {
+.score-info {
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
 }
 
-.productivity-badge-row {
+.score-badge-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-sm);
 }
 
-.productivity-title {
+.score-title {
   font-size: var(--text-2xl);
   font-weight: 800;
   letter-spacing: -0.02em;
 }
 
-.productivity-desc {
+.score-desc {
   max-width: 620px;
   font-size: var(--text-sm);
   line-height: 1.6;
   color: var(--text-secondary);
 }
 
-.productivity-factors {
+.score-factors {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-xs);
@@ -534,7 +658,7 @@
     order: -1;
   }
 
-  .productivity-card {
+  .score-card {
     grid-template-columns: 1fr;
     gap: var(--space-lg);
   }

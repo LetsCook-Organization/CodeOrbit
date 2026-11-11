@@ -1,10 +1,19 @@
 /**
- * CODEORBIT — REUSABLE UI COMPONENTS MODULE
- * Modals, Toasts, Confirmation Dialogs, Command Palette / Global Search.
+ * CODEORBIT — SHARED UI PIECES
+ * Toasts (pop-up messages), modals (dialogs), the "Are you sure?" dialog, and
+ * search (Ctrl+K).
  */
 
 import { icon } from './icons.js';
-import { escapeHTML, sounds } from './utils.js';
+import {
+  escapeHTML,
+  sounds,
+  formatDate,
+  formatDuration,
+  statusLabel,
+  projectStatusLabel,
+  skillLabel
+} from './utils.js';
 import { storage } from './storage.js';
 
 /* ==========================================================================
@@ -39,14 +48,13 @@ class ToastManager {
     let iconSvg;
     if (type === 'success') {
       iconSvg = `<svg class="toast-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>`;
-      sounds.success();
     } else if (type === 'error') {
       iconSvg = `<svg class="toast-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>`;
     } else if (type === 'warning') {
       iconSvg = `<svg class="toast-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`;
     } else if (type === 'achievement') {
       iconSvg = `<svg class="toast-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>`;
-      sounds.achievement();
+      sounds.achievement(); // the only sound in CodeOrbit (Settings → Sounds)
     } else {
       iconSvg = `<svg class="toast-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>`;
     }
@@ -109,6 +117,7 @@ export const toast = new ToastManager();
 export function openModal(modalId) {
   const modal = document.getElementById(modalId);
   if (!modal) return;
+  modal.classList.remove('closing');
   modal.classList.add('active');
   modal.setAttribute('aria-hidden', 'false');
   document.body.style.overflow = 'hidden';
@@ -120,16 +129,27 @@ export function openModal(modalId) {
   if (focusable.length > 0) {
     setTimeout(() => focusable[0].focus(), 50);
   }
-
-  sounds.click();
 }
 
 export function closeModal(modalId) {
   const modal = document.getElementById(modalId);
-  if (!modal) return;
-  modal.classList.remove('active');
+  if (!modal || !modal.classList.contains('active')) return;
   modal.setAttribute('aria-hidden', 'true');
   document.body.style.overflow = '';
+
+  // Play the short closing animation, then hide. The timer is a fallback in
+  // case animationend never fires (e.g. the element is detached).
+  modal.classList.add('closing');
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    // Re-opened while closing? openModal() removed 'closing'; keep it open.
+    if (!modal.classList.contains('closing')) return;
+    modal.classList.remove('closing', 'active');
+  };
+  modal.addEventListener('animationend', finish, { once: true });
+  setTimeout(finish, 250);
 }
 
 /**
@@ -138,7 +158,7 @@ export function closeModal(modalId) {
 export function setupModalDismissHandlers() {
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
-      const activeModal = document.querySelector('.modal-backdrop.active');
+      const activeModal = document.querySelector('.modal-backdrop.active:not(.closing)');
       if (activeModal) {
         closeModal(activeModal.id);
       }
@@ -190,7 +210,7 @@ export function showConfirmDialog({
           <p id="confirm-message" style="font-size: var(--text-sm); color: var(--text-secondary); line-height: 1.5;"></p>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary modal-close-btn">Cancel</button>
+          <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
           <button type="button" class="btn ${confirmClass}" id="confirm-proceed-btn">Proceed</button>
         </div>
       </div>
@@ -218,12 +238,14 @@ export function showConfirmDialog({
 }
 
 /* ==========================================================================
-   GLOBAL SEARCH & COMMAND PALETTE
+   SEARCH (Ctrl+K, "/" or the search button)
    ========================================================================== */
 export function openCommandPalette() {
   const modal = document.getElementById('command-palette-modal');
   if (!modal) return;
+  modal.classList.remove('closing');
   modal.classList.add('active');
+  modal.setAttribute('aria-hidden', 'false');
   document.body.style.overflow = 'hidden';
 
   const input = document.getElementById('palette-search-input');
@@ -234,12 +256,8 @@ export function openCommandPalette() {
   }
 }
 
-export function closeCommandPalette() {
-  const modal = document.getElementById('command-palette-modal');
-  if (modal) {
-    modal.classList.remove('active');
-    document.body.style.overflow = '';
-  }
+function closeCommandPalette() {
+  closeModal('command-palette-modal');
 }
 
 export function renderPaletteResults(query) {
@@ -250,7 +268,7 @@ export function renderPaletteResults(query) {
   const data = storage.getUniverse();
   const results = [];
 
-  // Search Skills
+  // Skills
   (data.skills || []).forEach(s => {
     const nameMatch = s.name && s.name.toLowerCase().includes(q);
     const catMatch = s.category && s.category.toLowerCase().includes(q);
@@ -260,7 +278,7 @@ export function renderPaletteResults(query) {
         type: 'Skill',
         icon: 'planet',
         title: s.name,
-        subtitle: `${s.category || 'General'} • ${s.proficiency || 'Beginner'} (${s.progress || 0}%)`,
+        subtitle: `${s.category || 'Other'} · ${statusLabel(s.status)} · ${Number(s.progress) || 0}%`,
         action: () => {
           window.location.hash = '#skills';
           closeCommandPalette();
@@ -269,7 +287,7 @@ export function renderPaletteResults(query) {
     }
   });
 
-  // Search Projects
+  // Projects
   (data.projects || []).forEach(p => {
     const nameMatch = p.name && p.name.toLowerCase().includes(q);
     const descMatch = p.description && p.description.toLowerCase().includes(q);
@@ -279,7 +297,7 @@ export function renderPaletteResults(query) {
         type: 'Project',
         icon: 'folder',
         title: p.name,
-        subtitle: `${p.status || 'Active'} • ${p.technologies ? p.technologies.slice(0, 3).join(', ') : ''}`,
+        subtitle: [projectStatusLabel(p.status), ...(p.technologies || []).slice(0, 3)].join(' · '),
         action: () => {
           window.location.hash = '#projects';
           closeCommandPalette();
@@ -288,7 +306,7 @@ export function renderPaletteResults(query) {
     }
   });
 
-  // Search Activities / Logs
+  // Study sessions
   (data.activities || []).forEach(a => {
     const titleMatch = a.title && a.title.toLowerCase().includes(q);
     const skillMatch = a.skill && a.skill.toLowerCase().includes(q);
@@ -298,7 +316,7 @@ export function renderPaletteResults(query) {
         type: 'Study session',
         icon: 'clock',
         title: a.title,
-        subtitle: `${a.skill || 'General'} • ${a.duration || 0}m • ${a.date || ''}`,
+        subtitle: `${skillLabel(a.skill)} · ${formatDuration(a.duration)} · ${formatDate(a.date)}`,
         action: () => {
           window.location.hash = '#progress';
           closeCommandPalette();
@@ -307,7 +325,7 @@ export function renderPaletteResults(query) {
     }
   });
 
-  // Search Goals
+  // Goals
   (data.goals || []).forEach(g => {
     const titleMatch = g.title && g.title.toLowerCase().includes(q);
     const catMatch = g.category && g.category.toLowerCase().includes(q);
@@ -316,7 +334,7 @@ export function renderPaletteResults(query) {
         type: 'Goal',
         icon: 'flag',
         title: g.title,
-        subtitle: `${g.priority || 'Medium'} priority • Due ${g.deadline || 'any time'}`,
+        subtitle: `${g.priority || 'Medium'} priority · ${g.deadline ? `due ${formatDate(g.deadline)}` : 'no due date'}`,
         action: () => {
           window.location.hash = '#goals';
           closeCommandPalette();

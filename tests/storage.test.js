@@ -149,15 +149,20 @@ describe('achievements', () => {
 describe('import and export', () => {
   const minimal = extra => JSON.stringify({ skills: [], activities: [], projects: [], ...extra });
 
-  test('rejects text that is not JSON', () => {
+  test('rejects text that is not JSON, with a message people can understand', () => {
     const r = storage.importJSON('definitely not json');
     assert.equal(r.success, false);
-    assert.ok(r.error);
+    // Shown as-is in the "Could not restore" message: no parser or schema jargon
+    assert.match(r.error, /not a CodeOrbit backup/);
+    assert.doesNotMatch(r.error, /JSON|token|collections|schema/i);
   });
 
   test('rejects JSON missing the core lists', () => {
-    assert.equal(storage.importJSON(JSON.stringify({ skills: [] })).success, false);
+    const r = storage.importJSON(JSON.stringify({ skills: [] }));
+    assert.equal(r.success, false);
+    assert.match(r.error, /not a CodeOrbit backup/);
     assert.equal(storage.importJSON('[]').success, false);
+    assert.equal(storage.importJSON('null').success, false);
   });
 
   test('a failed import leaves existing data untouched', () => {
@@ -200,11 +205,11 @@ describe('import and export', () => {
   });
 
   // Regression for D-009: a backup without a profile used to become "Alex Rivera".
-  test('a backup without profile or settings gets blank defaults, not the demo user', () => {
+  test('a backup without profile or settings gets blank defaults, not the sample data user', () => {
     storage.importJSON(minimal());
     const u = storage.getUniverse();
     assert.equal(u.profile.name, 'Developer');
-    assert.equal(u.settings.theme, 'dark');
+    assert.equal(u.settings.weeklyTargetHours, 10);
     assert.deepEqual(u.goals, []);
     assert.deepEqual(u.achievements, []);
   });
@@ -252,11 +257,15 @@ describe('import and export', () => {
     const exported = storage.exportJSON();
     storage.resetAllData();
     assert.equal(storage.importJSON(exported).success, true);
-    assert.deepEqual(storage.getUniverse(), before);
+    const after = storage.getUniverse();
+    // Restoring records that a backup exists (for the reminder on Home); nothing else changes.
+    assert.ok(after.settings.lastBackupAt);
+    delete after.settings.lastBackupAt;
+    assert.deepEqual(after, before);
   });
 });
 
-describe('reset and demo', () => {
+describe('delete all and sample data', () => {
   test('reset empties everything', () => {
     storage.saveSkill({ name: 'X' });
     storage.unlockAchievements(['first_skill']);
@@ -265,10 +274,95 @@ describe('reset and demo', () => {
     assert.deepEqual(storage.getAchievements(), []);
   });
 
-  test('demo data is only loaded on request', () => {
+  test('sample data is only loaded on request', () => {
     assert.notEqual(storage.getProfile().name, 'Alex Rivera');
-    storage.loadDemoUniverse();
+    storage.loadSampleData();
     assert.equal(storage.getProfile().name, 'Alex Rivera');
     assert.ok(storage.getSkills().length > 0);
+  });
+});
+
+describe('change events say when the whole data set was replaced', () => {
+  beforeEach(freshVisit);
+
+  const reasons = fn => {
+    const seen = [];
+    const listener = e => seen.push(e.detail && e.detail.reason);
+    window.addEventListener('codeorbit:data-changed', listener);
+    try {
+      fn();
+    } finally {
+      window.removeEventListener('codeorbit:data-changed', listener);
+    }
+    return seen;
+  };
+
+  test('sample data, delete all and restore are "replace"; normal saves are "edit"', () => {
+    assert.deepEqual(
+      reasons(() => storage.loadSampleData()),
+      ['replace']
+    );
+    assert.deepEqual(
+      reasons(() => storage.resetAllData()),
+      ['replace']
+    );
+    const backup = JSON.stringify({ skills: [], activities: [], projects: [] });
+    assert.deepEqual(
+      reasons(() => storage.importJSON(backup)),
+      ['replace']
+    );
+    assert.deepEqual(
+      reasons(() => storage.saveSettings({ weeklyTargetHours: 9 })),
+      ['edit']
+    );
+  });
+});
+
+describe('backup reminder state', () => {
+  beforeEach(freshVisit);
+
+  test('restoring a backup counts as having a backup', () => {
+    const backup = JSON.stringify({ skills: [], activities: [], projects: [] });
+    storage.importJSON(backup);
+    assert.ok(Date.parse(storage.getSettings().lastBackupAt) > 0);
+  });
+
+  test('sample data is marked so it gets no backup reminder', () => {
+    storage.loadSampleData();
+    assert.equal(storage.getSettings().sampleData, true);
+  });
+
+  // D-026: once you add your own things to the sample data, it is worth backing up.
+  test('adding or changing your own data removes the sample mark', () => {
+    for (const save of [
+      () => storage.saveSkill({ name: 'Mine' }),
+      () => storage.saveActivity({ title: 'Mine', duration: 30, date: '2026-11-07' }),
+      () => storage.saveProject({ name: 'Mine' }),
+      () => storage.saveGoal({ title: 'Mine' })
+    ]) {
+      storage.loadSampleData();
+      save();
+      assert.equal(storage.getSettings().sampleData, undefined);
+    }
+  });
+
+  test('changing settings alone keeps the sample mark', () => {
+    storage.loadSampleData();
+    storage.saveSettings({ weeklyTargetHours: 8 });
+    assert.equal(storage.getSettings().sampleData, true);
+  });
+
+  test('settings nothing reads any more are dropped when the data is replaced', () => {
+    const backup = JSON.stringify({
+      skills: [],
+      activities: [],
+      projects: [],
+      settings: { theme: 'light', reducedMotion: true, weeklyTargetHours: 6 }
+    });
+    storage.importJSON(backup);
+    const settings = storage.getSettings();
+    assert.equal('theme' in settings, false);
+    assert.equal('reducedMotion' in settings, false);
+    assert.equal(settings.weeklyTargetHours, 6);
   });
 });

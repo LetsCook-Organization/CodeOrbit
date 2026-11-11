@@ -1,9 +1,17 @@
 /**
- * CODEORBIT — LOCALSTORAGE ARCHITECTURE MODULE
- * Centralized, safe, validated client-side persistence engine.
+ * CODEORBIT — SAVED DATA
+ * The only module that reads or writes localStorage. Everything is one object
+ * under one key; every save fires 'codeorbit:data-changed' (see app.js).
+ * The stored key and field names never change, so old backups keep working.
  */
 
-import { generateId, getTodayISO, getRelativeISO } from './utils.js';
+import {
+  generateId,
+  getTodayISO,
+  getRelativeISO,
+  DEFAULT_DAILY_HOURS,
+  DEFAULT_WEEKLY_HOURS
+} from './utils.js';
 
 const STORAGE_KEY = 'codeorbit_universe_v1';
 const CORRUPT_BACKUP_KEY = 'codeorbit_universe_v1_corrupt_backup';
@@ -12,7 +20,8 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}(T[\d:.]+(Z|[+-]\d{2}:?\d{2})?)?$/;
 const DATA_VERSION = 1;
 
 /**
- * A blank universe: what every new user starts with, and what Reset restores.
+ * Nothing saved: what every new user starts with, and what
+ * Settings → Your data → Delete all my data goes back to.
  */
 function getEmptyUniverse() {
   return {
@@ -26,11 +35,9 @@ function getEmptyUniverse() {
       joinedDate: getTodayISO()
     },
     settings: {
-      theme: 'dark',
-      dailyTargetHours: 2,
-      weeklyTargetHours: 10,
-      soundEnabled: true,
-      reducedMotion: false
+      dailyTargetHours: DEFAULT_DAILY_HOURS,
+      weeklyTargetHours: DEFAULT_WEEKLY_HOURS,
+      soundEnabled: true
     },
     skills: [],
     activities: [],
@@ -41,10 +48,11 @@ function getEmptyUniverse() {
 }
 
 /**
- * Demo universe ("Alex Rivera"). Loaded ONLY when the user clicks
- * Settings → Load Demo Universe, never automatically.
+ * Sample data ("Alex Rivera"). Loaded ONLY when the user asks for it: the
+ * "Try it with sample data first" button on the first visit, or
+ * Settings → Your data → Load sample data. Never automatically.
  */
-function getDefaultUniverse() {
+function getSampleUniverse() {
   const today = getTodayISO();
   const d1 = getRelativeISO(-1);
   const d2 = getRelativeISO(-2);
@@ -62,11 +70,10 @@ function getDefaultUniverse() {
       joinedDate: '2026-01-15'
     },
     settings: {
-      theme: 'dark', // 'dark' | 'light'
       dailyTargetHours: 2,
       weeklyTargetHours: 12,
       soundEnabled: true,
-      reducedMotion: false
+      sampleData: true // no backup reminder until you add something of your own
     },
     skills: [
       {
@@ -306,6 +313,15 @@ function getDefaultUniverse() {
   };
 }
 
+/**
+ * Sample data gets no backup reminder (D-026). Once you add or change a skill,
+ * study session, project or goal, the data is yours and worth keeping, so the
+ * reminder rules apply again.
+ */
+function markAsOwnData(data) {
+  if (data.settings && data.settings.sampleData) delete data.settings.sampleData;
+}
+
 class StorageManager {
   constructor() {
     this.cache = null;
@@ -313,7 +329,9 @@ class StorageManager {
   }
 
   /**
-   * Initializes local storage and migrates or sets default state.
+   * Reads the saved data. Nothing saved yet → start empty; unreadable → keep a
+   * copy under CORRUPT_BACKUP_KEY, then start empty. (No upgrade step for older
+   * data formats yet: issue #17.)
    */
   init() {
     let raw;
@@ -326,7 +344,7 @@ class StorageManager {
       return;
     }
 
-    // First visit: start empty. Demo data is opt-in from Settings.
+    // First visit: start empty. Sample data is opt-in (see getSampleUniverse).
     if (!raw) {
       this.startFresh();
       return;
@@ -362,23 +380,25 @@ class StorageManager {
     this.saveUniverse(empty);
   }
 
-  /**
-   * Safe read of entire universe state.
-   */
+  /** A deep copy of everything saved, so callers cannot change the cache by accident. */
   getUniverse() {
     if (!this.cache) this.init();
     return JSON.parse(JSON.stringify(this.cache));
   }
 
   /**
-   * Safe atomic write to localStorage with event emission.
+   * Saves everything and fires 'codeorbit:data-changed'.
+   * @param {Object} data
+   * @param {'edit'|'replace'} [reason='edit'] - 'replace' when the whole data set is
+   *   swapped (sample data, restore, delete all). Listeners use it to stay quiet,
+   *   e.g. no "You earned a badge" pop-ups for badges nobody just earned.
    */
-  saveUniverse(data) {
+  saveUniverse(data, reason = 'edit') {
     try {
       this.cache = data;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
       window.dispatchEvent(
-        new CustomEvent('codeorbit:data-changed', { detail: { timestamp: Date.now() } })
+        new CustomEvent('codeorbit:data-changed', { detail: { timestamp: Date.now(), reason } })
       );
       return true;
     } catch (e) {
@@ -418,7 +438,7 @@ class StorageManager {
   }
 
   /* ========================================================================
-     SKILLS (CRUD)
+     SKILLS
      ======================================================================== */
   getSkills() {
     return this.getUniverse().skills || [];
@@ -430,6 +450,7 @@ class StorageManager {
 
   saveSkill(skill) {
     const data = this.getUniverse();
+    markAsOwnData(data);
     const skills = data.skills || [];
     const now = new Date().toISOString();
 
@@ -463,7 +484,7 @@ class StorageManager {
   }
 
   /* ========================================================================
-     MISSION LOGS / ACTIVITIES (CRUD)
+     STUDY SESSIONS (stored as "activities")
      ======================================================================== */
   getActivities() {
     return this.getUniverse().activities || [];
@@ -471,6 +492,7 @@ class StorageManager {
 
   saveActivity(activity) {
     const data = this.getUniverse();
+    markAsOwnData(data);
     const activities = data.activities || [];
     const now = new Date().toISOString();
 
@@ -502,7 +524,7 @@ class StorageManager {
   }
 
   /* ========================================================================
-     SPACE MISSIONS / PROJECTS (CRUD)
+     PROJECTS
      ======================================================================== */
   getProjects() {
     return this.getUniverse().projects || [];
@@ -514,6 +536,7 @@ class StorageManager {
 
   saveProject(project) {
     const data = this.getUniverse();
+    markAsOwnData(data);
     const projects = data.projects || [];
     const now = new Date().toISOString();
 
@@ -545,7 +568,7 @@ class StorageManager {
   }
 
   /* ========================================================================
-     MILESTONES / GOALS (CRUD)
+     GOALS
      ======================================================================== */
   getGoals() {
     return this.getUniverse().goals || [];
@@ -553,6 +576,7 @@ class StorageManager {
 
   saveGoal(goal) {
     const data = this.getUniverse();
+    markAsOwnData(data);
     const goals = data.goals || [];
     const now = new Date().toISOString();
 
@@ -584,14 +608,10 @@ class StorageManager {
   }
 
   /* ========================================================================
-     ACHIEVEMENTS
+     BADGES (stored as "achievements")
      ======================================================================== */
   getAchievements() {
     return this.getUniverse().achievements || [];
-  }
-
-  unlockAchievement(achievementId) {
-    return this.unlockAchievements([achievementId]);
   }
 
   /**
@@ -620,19 +640,30 @@ class StorageManager {
     return JSON.stringify(data, null, 2);
   }
 
+  /**
+   * Restores a backup file. Replaces everything; checks and cleans the file first.
+   * @param {string} jsonString
+   * @returns {{ success: true } | { success: false, error: string }} error is shown to the user
+   */
   importJSON(jsonString) {
+    const NOT_A_BACKUP =
+      'This file is not a CodeOrbit backup. Choose a file you downloaded with "Download backup".';
     try {
-      const parsed = JSON.parse(jsonString);
-      // Validate schema
-      if (!parsed || typeof parsed !== 'object') {
-        throw new Error('Invalid JSON root format: must be an object.');
+      let parsed;
+      try {
+        parsed = JSON.parse(jsonString);
+      } catch {
+        throw new Error(NOT_A_BACKUP);
       }
+      // A backup is an object with at least the skills, study sessions and projects lists
       if (
+        !parsed ||
+        typeof parsed !== 'object' ||
         !Array.isArray(parsed.skills) ||
         !Array.isArray(parsed.activities) ||
         !Array.isArray(parsed.projects)
       ) {
-        throw new Error('Missing essential CodeOrbit collections (skills, activities, projects).');
+        throw new Error(NOT_A_BACKUP);
       }
 
       const defaults = getEmptyUniverse();
@@ -645,6 +676,9 @@ class StorageManager {
         typeof parsed.settings === 'object' && parsed.settings
           ? { ...defaults.settings, ...parsed.settings }
           : defaults.settings;
+      this.keepDeviceSettings(parsed);
+      // You just restored from a file, so a backup exists.
+      parsed.settings.lastBackupAt = new Date().toISOString();
       parsed.skills = Array.isArray(parsed.skills) ? parsed.skills : [];
       parsed.activities = Array.isArray(parsed.activities) ? parsed.activities : [];
       parsed.projects = Array.isArray(parsed.projects) ? parsed.projects : [];
@@ -688,7 +722,7 @@ class StorageManager {
         a.duration = Math.max(1, Number.isNaN(duration) ? 30 : duration);
       });
 
-      this.saveUniverse(parsed);
+      this.saveUniverse(parsed, 'replace');
       return { success: true };
     } catch (e) {
       return { success: false, error: e.message };
@@ -696,12 +730,28 @@ class StorageManager {
   }
 
   resetAllData() {
-    return this.saveUniverse(getEmptyUniverse());
+    return this.saveUniverse(this.keepDeviceSettings(getEmptyUniverse()), 'replace');
   }
 
-  loadDemoUniverse() {
-    const demo = getDefaultUniverse();
-    return this.saveUniverse(demo);
+  loadSampleData() {
+    return this.saveUniverse(this.keepDeviceSettings(getSampleUniverse()), 'replace');
+  }
+
+  /**
+   * The backup reminder state is about this device, not the data. Replacing the
+   * data (sample data, restore, delete all) keeps it as it was.
+   */
+  keepDeviceSettings(universe) {
+    const current = this.getSettings();
+    universe.settings = { ...(universe.settings || {}) };
+    // Settings older versions saved that nothing reads any more
+    delete universe.settings.theme; // one (dark) look since D-025
+    delete universe.settings.reducedMotion; // the system setting is used instead
+    for (const key of ['lastBackupAt', 'backupSnoozeUntil']) {
+      if (current[key]) universe.settings[key] = current[key];
+      else delete universe.settings[key];
+    }
+    return universe;
   }
 }
 

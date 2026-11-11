@@ -4,7 +4,7 @@
    Three rings turn slowly; everything stops when reduced motion is on.
    ========================================================================== */
 .home-orbit {
-  --orbit-size: min(460px, 86vw);
+  --orbit-size: min(460px, 78vw); /* room for the tap area around edge planets */
   position: relative;
   width: var(--orbit-size);
   height: var(--orbit-size);
@@ -52,9 +52,65 @@
   position: absolute;
   left: 50%;
   top: 50%;
+  padding: 0;
+  border: 0;
   border-radius: 50%;
   background: var(--text-primary);
   transform: translate(-50%, -50%);
+  cursor: pointer;
+  transition: box-shadow var(--transition-fast);
+}
+
+/* Bigger invisible hit area so small planets are easy to tap (44px+). */
+.orbit-planet::before {
+  content: '';
+  position: absolute;
+  inset: -14px;
+  border-radius: 50%;
+}
+
+.orbit-planet:hover,
+.orbit-planet.is-selected {
+  box-shadow:
+    0 0 0 4px var(--bg-main),
+    0 0 0 5px var(--text-primary);
+}
+
+.orbit-planet.is-done.is-selected,
+.orbit-planet.is-done:hover {
+  box-shadow:
+    0 0 0 4px var(--bg-main),
+    0 0 0 5px var(--primary);
+}
+
+/* Hold still while someone is pointing at or choosing a planet. */
+.home-orbit:hover .orbit-spin,
+.home-orbit:focus-within .orbit-spin {
+  animation-play-state: paused;
+}
+
+.orbit-detail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+  min-height: 3.2rem;
+}
+
+.orbit-detail[hidden] {
+  display: none;
+}
+
+.orbit-detail-name {
+  font-size: var(--text-xl);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.orbit-detail-meta {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
 }
 
 .orbit-planet.is-done {
@@ -80,10 +136,6 @@
 .orbit-core img {
   width: 58%;
   height: auto;
-}
-
-[data-theme='light'] .orbit-core img {
-  content: url('../images/letscook-mark-light.png');
 }
 
 /* First-visit orbit: dashed, empty */

@@ -8,6 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+- Goal and project deadlines now show the correct local-day countdown in every timezone.
+- Finished projects with past target dates now say when they were due instead of showing a late countdown.
+
 ## [0.2.0] - 2026-11-08
 
 A calmer, simpler CodeOrbit that works offline and reminds you to back up.

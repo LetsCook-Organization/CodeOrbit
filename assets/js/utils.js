@@ -222,6 +222,43 @@ export function formatRelativeTime(dateStr) {
 }
 
 /**
+ * Whole local calendar days from today until `dateStr` (0 = today, 1 = tomorrow,
+ * -1 = yesterday). Plain YYYY-MM-DD strings are parsed as local midnight so
+ * timezones and time-of-day never shift the day count.
+ * @param {string} dateStr - ISO date string (YYYY-MM-DD or full ISO timestamp)
+ * @returns {number | null} Integer day difference, or null when missing/invalid
+ */
+export function daysUntil(dateStr) {
+  if (typeof dateStr !== 'string') return null;
+  const trimmed = dateStr.trim();
+  if (!/^\d{4}-\d{2}-\d{2}(T[\d:.]+(Z|[+-]\d{2}:?\d{2})?)?$/.test(trimmed)) return null;
+  if (trimmed.length > 10 && Number.isNaN(new Date(trimmed).getTime())) return null;
+
+  const dayStr = trimmed.slice(0, 10);
+  const target = new Date(`${dayStr}T00:00:00`);
+  if (Number.isNaN(target.getTime()) || toLocalISO(target) !== dayStr) return null;
+
+  const today = new Date(`${getTodayISO()}T00:00:00`);
+  const days = Math.round((target - today) / 86400000);
+  return days === 0 ? 0 : days;
+}
+
+/**
+ * Formats a day difference from daysUntil() as a plain-language countdown
+ * (e.g. '1 day left', '2 days late', 'due today', or 'due in 1 day').
+ * @param {number | null} days - Integer day offset returned by daysUntil()
+ * @param {{ capitalizeToday?: boolean, futureStyle?: 'left' | 'in' }} [options]
+ * @returns {string} Countdown label, or '' when days is null/invalid
+ */
+export function formatDaysUntil(days, { capitalizeToday = false, futureStyle = 'left' } = {}) {
+  if (!Number.isFinite(days)) return '';
+  const unit = n => `${n} day${n === 1 ? '' : 's'}`;
+  if (days < 0) return `${unit(-days)} late`;
+  if (days === 0) return capitalizeToday ? 'Due today' : 'due today';
+  return futureStyle === 'in' ? `due in ${unit(days)}` : `${unit(days)} left`;
+}
+
+/**
  * Formats duration in minutes into a human-friendly string (e.g. "1h 45m" or "45m")
  * @param {number} minutes - Duration in minutes
  * @returns {string} Formatted duration

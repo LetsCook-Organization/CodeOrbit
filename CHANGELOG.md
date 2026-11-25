@@ -9,6 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ## [Unreleased]
 
 ### Fixed
+- Keyboard focus stays inside open dialogs and returns to the control that opened them when they close.
 - Goal and project deadlines now show the correct local-day countdown in every timezone.
 - Finished projects with past target dates now say when they were due instead of showing a late countdown.
 

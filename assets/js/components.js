@@ -114,42 +114,114 @@ export const toast = new ToastManager();
 /* ==========================================================================
    MODAL CONTROLLER
    ========================================================================== */
+const dialogStack = [];
+const closingDialogs = new WeakMap();
+let previousOverflow = '';
+
+function tabStops(modal) {
+  return [
+    ...modal.querySelectorAll(
+      'a[href], button, input:not([type="hidden"]), select, textarea, [tabindex], [contenteditable="true"]'
+    )
+  ].filter(
+    el =>
+      el.tabIndex >= 0 &&
+      !el.matches(':disabled') &&
+      !el.closest('[inert], [hidden]') &&
+      el.getClientRects().length > 0 &&
+      getComputedStyle(el).visibility === 'visible'
+  );
+}
+
+function focusInside(modal) {
+  const stops = tabStops(modal);
+  const initial = stops.find(el => !el.classList.contains('modal-close-btn')) || stops[0];
+  // A dialog without controls must still have somewhere to put focus.
+  if (!initial) modal.setAttribute('tabindex', '-1');
+  (initial || modal).focus();
+}
+
+function trapFocus(event, modal) {
+  if (event.key !== 'Tab') return;
+  // Recalculate each time: search results and form controls can change.
+  const stops = tabStops(modal);
+  const first = stops[0];
+  const last = stops[stops.length - 1];
+  const current = document.activeElement;
+  if (!first) {
+    event.preventDefault();
+    focusInside(modal);
+  } else if (!stops.includes(current) || (event.shiftKey ? current === first : current === last)) {
+    event.preventDefault();
+    (event.shiftKey ? last : first).focus();
+  }
+}
+
 export function openModal(modalId) {
   const modal = document.getElementById(modalId);
   if (!modal) return;
+  const current = dialogStack[dialogStack.length - 1];
+  if (current?.modal === modal) {
+    focusInside(modal);
+    return;
+  }
+  // An already covered dialog stays behind the current one.
+  if (dialogStack.some(entry => entry.modal === modal)) return;
+
+  const opener = document.activeElement;
+  if (!current) previousOverflow = document.body.style.overflow;
+  closingDialogs.get(modal)?.();
   modal.classList.remove('closing');
   modal.classList.add('active');
+  modal.inert = false;
   modal.setAttribute('aria-hidden', 'false');
+  dialogStack.push({ modal, opener });
   document.body.style.overflow = 'hidden';
-
-  // Auto focus first interactive element
-  const focusable = modal.querySelectorAll(
-    'input:not([type="hidden"]), select, textarea, button:not(.modal-close-btn)'
-  );
-  if (focusable.length > 0) {
-    setTimeout(() => focusable[0].focus(), 50);
-  }
+  focusInside(modal);
+  // Keep a covered dialog out of the tab order and accessibility tree.
+  if (current) current.modal.inert = true;
 }
 
 export function closeModal(modalId) {
   const modal = document.getElementById(modalId);
-  if (!modal || !modal.classList.contains('active')) return;
-  modal.setAttribute('aria-hidden', 'true');
-  document.body.style.overflow = '';
+  const index = dialogStack.findIndex(entry => entry.modal === modal);
+  if (index === -1) return;
+  const wasTop = index === dialogStack.length - 1;
+  const [{ opener }] = dialogStack.splice(index, 1);
+  const current = dialogStack[dialogStack.length - 1];
 
-  // Play the short closing animation, then hide. The timer is a fallback in
-  // case animationend never fires (e.g. the element is detached).
+  // If a covered dialog is closed, don't return to one of its hidden controls later.
+  if (!wasTop && modal.contains(dialogStack[index].opener)) {
+    dialogStack[index].opener = opener;
+  }
+  if (wasTop) {
+    if (current) current.modal.inert = false;
+    if (opener?.isConnected && (!current || current.modal.contains(opener))) {
+      opener.focus();
+    }
+    if (current && !current.modal.contains(document.activeElement)) focusInside(current.modal);
+    if (!current && modal.contains(document.activeElement)) document.activeElement.blur();
+  }
+  modal.inert = true;
+  modal.setAttribute('aria-hidden', 'true');
+  if (!current) document.body.style.overflow = previousOverflow;
+
+  // Keep the existing closing animation, but cancel stale callbacks on reopen.
   modal.classList.add('closing');
-  let done = false;
-  const finish = () => {
-    if (done) return;
-    done = true;
-    // Re-opened while closing? openModal() removed 'closing'; keep it open.
-    if (!modal.classList.contains('closing')) return;
-    modal.classList.remove('closing', 'active');
+  let timer;
+  const cleanup = () => {
+    clearTimeout(timer);
+    modal.removeEventListener('animationend', finish);
+    closingDialogs.delete(modal);
   };
-  modal.addEventListener('animationend', finish, { once: true });
-  setTimeout(finish, 250);
+  function finish(event) {
+    if (event && event.target !== modal) return;
+    cleanup();
+    modal.classList.remove('closing', 'active');
+  }
+  timer = setTimeout(finish, 250);
+  closingDialogs.set(modal, cleanup);
+  modal.addEventListener('animationend', finish);
 }
 
 /**
@@ -157,13 +229,19 @@ export function closeModal(modalId) {
  */
 export function setupModalDismissHandlers() {
   document.addEventListener('keydown', e => {
+    const current = dialogStack[dialogStack.length - 1];
+    if (!current) return;
     if (e.key === 'Escape') {
-      const activeModal = document.querySelector('.modal-backdrop.active:not(.closing)');
-      if (activeModal) {
-        closeModal(activeModal.id);
-      }
-      closeCommandPalette();
+      e.preventDefault();
+      closeModal(current.modal.id);
+    } else {
+      trapFocus(e, current.modal);
     }
+  });
+
+  document.addEventListener('focusin', e => {
+    const current = dialogStack[dialogStack.length - 1];
+    if (current && !current.modal.contains(e.target)) focusInside(current.modal);
   });
 
   document.addEventListener('click', e => {
@@ -243,17 +321,12 @@ export function showConfirmDialog({
 export function openCommandPalette() {
   const modal = document.getElementById('command-palette-modal');
   if (!modal) return;
-  modal.classList.remove('closing');
-  modal.classList.add('active');
-  modal.setAttribute('aria-hidden', 'false');
-  document.body.style.overflow = 'hidden';
-
   const input = document.getElementById('palette-search-input');
   if (input) {
     input.value = '';
-    setTimeout(() => input.focus(), 50);
     renderPaletteResults('');
   }
+  openModal('command-palette-modal');
 }
 
 function closeCommandPalette() {

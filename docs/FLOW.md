@@ -97,7 +97,7 @@ Runs once, in this exact order. **Every step runs through `runStep(name, fn, fai
 | Step | Call | What it does |
 |---|---|---|
 | 1 | `initStarfield()` *(app.js)* | Draws the background stars; starts a `requestAnimationFrame` loop unless the OS asks for reduced motion. |
-| 2 | `setupModalDismissHandlers()` *(components.js)*, `setupGlobalShortcuts()` *(app.js)*, `syncSoundSetting()` *(app.js)* | **Esc** closes the open dialog and search; clicks on the backdrop / `[data-modal-close]` close dialogs. **Ctrl/Cmd+K** or **/** → `openCommandPalette()`; typing → `renderPaletteResults(query)`. `syncSoundSetting` copies `settings.soundEnabled` into `sounds.enabled`. |
+| 2 | `setupModalDismissHandlers()` *(components.js)*, `setupGlobalShortcuts()` *(app.js)*, `syncSoundSetting()` *(app.js)* | **Esc** closes the topmost open dialog; clicks on the backdrop / `[data-modal-close]` close dialogs. Tab and Shift+Tab wrap within the active dialog through `trapFocus()` and `getFocusWrapIndex()`; `closeModal()` restores focus to the opener when possible. **Ctrl/Cmd+K** or **/** → `openCommandPalette()`; typing → `renderPaletteResults(query)`. `syncSoundSetting` copies `settings.soundEnabled` into `sounds.enabled`. |
 | 3 | `registerServiceWorker()` *(app.js)* | Registers `sw.js` for offline use (https or localhost only; failure only means no offline support). |
 | 4 | `navigation.registerView(route, fn)` ×8 | Maps `'dashboard' → renderDashboard`, `'skills' → renderSkills`, … `'settings' → renderSettings`. |
 | 5 | `initDashboard()` … `initSettings()`, then `initRecap()` (9 calls, each its own step) | Each attaches its page's button/form/filter listeners. **None of them render** (see §5). `initSettings` also fills the profile picture in the top bar, because it is visible on every page. |
@@ -198,7 +198,7 @@ Search results navigate the same way: they set `window.location.hash` directly a
 
 ## 8. Other flows
 
-**Search (Ctrl+K):** `openCommandPalette()` → clears input → `renderPaletteResults('')` → searches skills, projects, study sessions and goals in `storage.getUniverse()` → shows the first 10 matches (with the label helpers, e.g. "Finished", "Project work") → click → set hash → close.
+**Search (Ctrl+K):** `openCommandPalette()` → clears input → `renderPaletteResults('')` → searches skills, projects, study sessions and goals in `storage.getUniverse()` → shows the first 10 matches (with the label helpers, e.g. "Finished", "Project work") → `openModal('command-palette-modal')` manages focus → click → set hash → close via `closeModal()`.
 
 **Download backup:** `downloadBackup()` *(settings.js; also used by Home's reminder)* → `handleExportJSON()` → `storage.exportJSON()` (pretty JSON) → `Blob` → temporary `<a download>` click → file `codeorbit-backup-YYYY-MM-DD.json` → `saveSettings({ lastBackupAt: now, backupSnoozeUntil: '' })`.
 

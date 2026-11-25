@@ -141,19 +141,30 @@ function focusInside(modal) {
   (initial || modal).focus();
 }
 
+/**
+ * Return the index to focus when wrapping, -1 for an empty dialog, or null
+ * when native Tab navigation can continue. A current index of -1 is outside.
+ */
+export function getFocusWrapIndex(count, currentIndex, backwards) {
+  if (count === 0) return -1;
+  const last = count - 1;
+  if (currentIndex === -1 || (backwards ? currentIndex === 0 : currentIndex === last)) {
+    return backwards ? last : 0;
+  }
+  return null;
+}
+
 function trapFocus(event, modal) {
   if (event.key !== 'Tab') return;
   // Recalculate each time: search results and form controls can change.
   const stops = tabStops(modal);
-  const first = stops[0];
-  const last = stops[stops.length - 1];
-  const current = document.activeElement;
-  if (!first) {
-    event.preventDefault();
+  const next = getFocusWrapIndex(stops.length, stops.indexOf(document.activeElement), event.shiftKey);
+  if (next === null) return;
+  event.preventDefault();
+  if (next === -1) {
     focusInside(modal);
-  } else if (!stops.includes(current) || (event.shiftKey ? current === first : current === last)) {
-    event.preventDefault();
-    (event.shiftKey ? last : first).focus();
+  } else {
+    stops[next].focus();
   }
 }
 
